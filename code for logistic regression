@@ -1,0 +1,143 @@
+
+import numpy as np
+
+class Classification(object):
+    
+    learning_rate = 0.01
+    l2 = 0.0
+    batches = 1
+    n_classes = 30
+    learning_rate = learning_rate
+    features = 13627
+    
+
+    def fit(self, X, y, n_pass):
+        
+        self.features = X.shape[1]
+        self.cost_ = []
+        self.n_pass = n_pass
+        self.W = np.random.normal(loc=0.0, scale= 0.01 , size=(self.features, self.n_classes))
+        self.b = np.zeros(self.n_classes,)
+        y_encoded = self._one_hot_encoded(y=y, n_labels=self.n_classes, dtype=np.float)
+
+        for i in range(self.n_pass):
+            for idx in self.make_batch(n_batches=self.batches,data=y):
+                total = self._net_input(X[idx], self.W, self.b)
+                softm = self._softmax(total)
+                loss = softm - y_encoded[idx]
+                mse = np.mean(loss, axis=0)
+
+                # gradient -> n_features x n_classes
+                gradient = np.dot(X[idx].T, loss)
+                
+                # update in opp. direction of the cost gradient
+                self.W -= (self.learning_rate * gradient +
+                            self.learning_rate * self.l2 * self.W)
+                self.b -= (self.learning_rate * np.sum(loss, axis=0))
+
+            # compute cost of the whole epoch
+            total = self._net_input(X, self.W, self.b)
+            softm = self._softmax(total)
+            cross_ent = self._cross_entropy(output=softm, y_target=y_encoded)
+            cost = self._cost(cross_ent)
+            self.cost_.append(cost)
+        return self
+ 
+    def predict(self, X):
+        
+        total = self._net_input(X, self.W, self.b)
+        softm = self._softmax(total)
+        return self.give_class(softm)
+
+    def _net_input(self, X, W, b):
+        return (np.dot(X,W) + b)
+
+    def _softmax(self, z):
+        return (np.exp(z.T) / np.sum(np.exp(z), axis=1)).T
+
+    def _cross_entropy(self, output, y_target):
+        return - np.sum(np.log(output) * (y_target), axis=1)
+
+    def _cost(self, cross_entropy):
+        L2_term = self.l2 * np.sum(self.W ** 2)
+        cross_entropy = cross_entropy + L2_term
+        return 0.5 * np.mean(cross_entropy)
+
+    def give_class(self, z):
+        return z.argmax(axis=1)
+    
+    def _one_hot_encoded(self, y, n_labels, dtype):
+        mat = np.zeros((len(y), n_labels))
+        for i, val in enumerate(y):
+            mat[i, val] = 1
+        return mat.astype(dtype)    
+    
+    def make_batch(self, n_batches, data):
+        indices = np.arange(data.shape[0])
+        indices = np.random.permutation(indices)
+        if n_batches > 1:
+            remainder = data.shape[0] % n_batches
+            if remainder:
+                minis = np.array_split(indices[:-remainder], n_batches)
+                minis[-1] = np.concatenate((minis[-1], indices[-remainder:]), axis=0)
+            else:
+                minis = np.array_split(indices, n_batches)
+
+        else:
+            minis = (indices,)
+
+        for idx_batch in minis:
+            yield idx_batch
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.metrics import accuracy_score
+from numpy import linalg
+from scipy import sparse
+dataset = pd.read_csv('training_data.csv', delimiter = ",",header= None)
+labeler = pd.read_csv('training_labels.csv', delimiter = ",",header= None)
+X = dataset.merge(labeler,how = 'inner',on = 0)    
+from sklearn.cross_validation import train_test_split
+from sklearn import preprocessing
+le = preprocessing.LabelEncoder()
+X_train, X_test, y_train, y_test = train_test_split(np.asarray(X.iloc[:,1:13627]),le.fit_transform(X.iloc[:,13627]).ravel() , test_size = 0.10, random_state = 0)
+lr = Classification()
+lr.fit(X_train, y_train, 800)
+
+
+y_pred = lr.predict(X_test)
+
+print(accuracy_score(y_pred,y_test))
+
+
+
+cm = pd.crosstab(y_pred, y_test)
+print(cm)
+ltp = []
+lfp = []
+lfn = []
+ltn = []
+
+for i in range (0,30):
+        ltp.append(cm.iloc[i,i])
+        lfn.append(cm.iloc[i,:].sum()-cm.iloc[i,i])
+        lfp.append(cm.iloc[:,i].sum()-cm.iloc[i,i])
+        ltn.append(2011 - cm.iloc[i,:].sum() - cm.iloc[:,i].sum() - cm.iloc[i,i])
+
+
+tp = sum(ltp)
+fp = sum(lfp)  
+fn = sum(lfn)  
+tn = sum(ltn)
+
+recall = tp/(tp+fn)
+f_score = 2*tp/((2*tp)+fp+fn)
+miss_rate = fn/(fn+tp)
+spef = tn/(tn+fp)
+print("Specificity: "  + str(spef)) 
+print("Miss Rate: " + str(miss_rate))
+print("F Score: " + str(f_score))
+print("Recall: " + str(recall))
